@@ -32,6 +32,8 @@
 #include "alloc-inl.h"
 #include "hash.h"
 
+#include "peri-mod.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -71,6 +73,13 @@
 /* Lots of globals, but mostly for the status UI and other things where it
    really makes no sense to haul them around as function parameters. */
 
+static u16 doneWork_param;
+
+/* On-demand model extraction when run without forkserver */
+#define MODEL_IF_LEN 100
+EXP_ST u8 *me_bin,
+          *me_config,
+          model_if[MODEL_IF_LEN];
 
 EXP_ST u8 *in_dir,                    /* Input directory with test cases  */
           *out_file,                  /* File to fuzz, if any             */
@@ -2138,10 +2147,15 @@ static u8 run_target(char** argv) {
 
   child_timed_out = 0;
 
+  int cur_case_me_run_num = 0;
+
   /* After this memset, trace_bits[] are effectively volatile, so we
      must prevent any earlier operations from venturing into that
      territory. */
 
+  doneWork_param = 0;
+
+RERUN_AFTER_ME:
   memset(trace_bits, 0, MAP_SIZE);
   MEM_BARRIER();
 
@@ -2257,6 +2271,7 @@ static u8 run_target(char** argv) {
   it.it_value.tv_sec = (exec_tmout / 1000);
   it.it_value.tv_usec = (exec_tmout % 1000) * 1000;
 
+// Comment out timeout for debugging child spawned by fork_server
   setitimer(ITIMER_REAL, &it, NULL);
 
   /* The SIGALRM handler simply kills the child_pid and sets child_timed_out. */
@@ -2282,7 +2297,77 @@ static u8 run_target(char** argv) {
   it.it_value.tv_sec = 0;
   it.it_value.tv_usec = 0;
 
+// Comment out timeout for debugging child spawned by fork_server
   setitimer(ITIMER_REAL, &it, NULL);
+
+  if (WIFEXITED(status) && (WEXITSTATUS(status) == PM_UNCAT_REG ||
+    WEXITSTATUS(status) == PM_UNMOD_SRRS)) {
+    /* Fuzzer run is terminated by access to unmodeled peripheral. */
+    if (dumb_mode == 1 || no_forkserver) {
+      /* fork server is disabled, extracted model here */
+      static int run_num = 1;
+      static char run_num_str[8];
+
+      s32 me_pid;
+      int me_status;
+
+      if (cur_case_me_run_num >= MAX_ME_INVOC_PER_CASE) {
+        // limit ME invocation # per case to avoid hanging AFL
+        // if exceeds threshold, error may happens. This case raises a crash
+        status = MAX_ME_INVOC_PER_CASE_VIOLATION;
+      } else {
+      // run me.py
+      me_pid = fork();
+      if (me_pid < 0) PFATAL("fork() for ME failed");
+
+      if (!me_pid) {
+        // Child
+        snprintf(run_num_str, 8, "%d", run_num);
+        char *argv[] = {me_bin, "--config", me_config,
+            "--run-num", run_num_str, "--print-to-file",
+            "--run-from-forkserver",
+            // fuzzer run dumps access to unmodeled peri into model_if
+            "--afl-file", out_file, "--model-if", model_if, NULL};
+
+        execv(me_bin, argv);
+      } else {
+        // Parent
+        if (waitpid(me_pid, &me_status, 0) <= 0)
+          PFATAL("waitpid() for ME failed");
+
+        // update model_if
+        // no need to modify -model-input option in argv of qemu cmd
+        // it always points to model_if global buffer
+        if (snprintf(model_if, MODEL_IF_LEN, "%d/peripheral_model.json", 
+          run_num) > MODEL_IF_LEN)
+          FATAL("After on-demand model extraction, model_if is too long!");
+        run_num ++;
+        cur_case_me_run_num ++;
+
+        // rerun the fuzzer run terminated by aup
+        goto RERUN_AFTER_ME;
+      }
+      }
+    } else {
+      /* fork server is going to invoke me.py to extract the missing model.
+         Upon finish, it will send 0 through pipe. */
+      s32 res;
+
+      if ((res = read(fsrv_st_fd, &status, 4)) != 4) {
+        if (stop_soon) return 0;
+        RPFATAL(res, "Unable to communicate with fork server (OOM?)");
+      }
+
+      if (status == PM_ME_EXIT) {
+        /* me.py exits. Any value other than this indicates error happens, 
+           we reuse afl's code to handle them. */
+
+        // no need to clean up local variables before goto
+        // TODO check number of ME invocation in qemu
+        goto RERUN_AFTER_ME;
+      }
+    }
+  }
 
   total_execs++;
 
@@ -2308,6 +2393,7 @@ static u8 run_target(char** argv) {
 
   if (WIFSIGNALED(status) && !stop_soon) {
     kill_signal = WTERMSIG(status);
+    doneWork_param = kill_signal+256;
     return FAULT_CRASH;
   }
 
@@ -2321,6 +2407,7 @@ static u8 run_target(char** argv) {
 
   /* treat all non-zero return values from qemu system test as a crash */
   if(qemu_mode > 1 && WEXITSTATUS(status) != 0) {
+    doneWork_param = WEXITSTATUS(status);
     return FAULT_CRASH;
   }
 
@@ -3078,8 +3165,10 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
 
 #ifndef SIMPLE_FILES
 
-      fn = alloc_printf("%s/crashes/id:%06llu,sig:%02u,%s", out_dir,
-                        unique_crashes, kill_signal, describe_op(0));
+      fn = alloc_printf("%s/crashes/id:%06llu,ret_v:0x%x,%s", out_dir,
+                        unique_crashes, doneWork_param, describe_op(0));
+      //fn = alloc_printf("%s/crashes/id:%06llu,sig:%02u,%s", out_dir,
+                        //unique_crashes, kill_signal, describe_op(0));
 
 #else
 
@@ -6771,6 +6860,12 @@ static void usage(u8* argv0) {
        "  -n            - fuzz without instrumentation (dumb mode)\n"
        "  -x dir        - optional fuzzer dictionary (see README)\n\n"
 
+       "On-demand model extraction when run without forkserver:\n\n"
+
+       "  -a me_bin     - model extraction script (required)\n"
+       "  -b me_config  - model extraction config (required)\n"
+       "  -c model_if   - model input file (required)\n"
+
        "Other stuff:\n\n"
 
        "  -T text       - text banner to show on the screen\n"
@@ -7307,6 +7402,12 @@ static char** get_qemu_argv(int qemu_mode, u8* own_loc, char** argv, int argc) {
     new_argv[1] = "--";
   } else {
     memcpy(new_argv + 1, argv + 1, sizeof(char*) * argc);
+    if (no_forkserver) {
+      // append model_if option to the end
+      new_argv[argc] = "-model-input";
+      new_argv[argc+1] = model_if;
+      new_argv[argc+2] = NULL; // redudant, since ck_alloc zero'd new_argv
+    }
   }
 
   /* Now we need to actually find the QEMU binary to put in argv[0]. */
@@ -7356,7 +7457,7 @@ static char** get_qemu_argv(int qemu_mode, u8* own_loc, char** argv, int argc) {
     return new_argv;
 
   }
-  cp = alloc_printf("%s/%s", BIN_PATH, argv[0]);
+  cp = alloc_printf("%s", argv[0]);
   if (qemu_mode > 1 && !access(cp, X_OK)) {
 
     target_path = new_argv[0] = cp;
@@ -7426,9 +7527,26 @@ int main(int argc, char** argv) {
 
   doc_path = access(DOC_PATH, F_OK) ? "docs" : DOC_PATH;
 
-  while ((opt = getopt(argc, argv, "+i:o:f:m:t:T:dnCB:S:M:x:Q")) > 0)
+  while ((opt = getopt(argc, argv, "+i:o:f:m:t:T:dnCB:S:M:x:Qa:b:c:")) > 0)
 
     switch (opt) {
+      /* On-demand model extraction when run without forkserver */
+      case 'a':
+
+        me_bin = optarg;
+        break;
+
+      case 'b':
+
+        me_config = optarg;
+        break;
+
+      case 'c':
+
+        if (strlen(optarg) >= MODEL_IF_LEN)
+          FATAL("-c options should be shorter than %d bytes", MODEL_IF_LEN);
+        strcpy(model_if, optarg);
+        break;
 
       case 'i':
 
@@ -7606,6 +7724,10 @@ int main(int argc, char** argv) {
 
   if (dumb_mode == 2 && no_forkserver)
     FATAL("AFL_DUMB_FORKSRV and AFL_NO_FORKSRV are mutually exclusive");
+
+  if (qemu_mode == 2 && no_forkserver)
+    // -a/-b/-c is required when no_forkserver
+    if (!me_bin || !me_config || !strlen(model_if)) usage(argv[0]);
 
   if (getenv("AFL_LD_PRELOAD"))
     setenv("LD_PRELOAD", getenv("AFL_LD_PRELOAD"), 1);

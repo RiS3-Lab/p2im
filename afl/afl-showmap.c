@@ -707,9 +707,10 @@ static char** get_qemu_argv(int qemu_mode, u8* own_loc, char** argv, int argc) {
     return new_argv;
 
   }
-  if (qemu_mode > 1 && !access(BIN_PATH "/afl-qemu-system-trace", X_OK)) {
+  cp = alloc_printf("%s", argv[0]);
+  if (qemu_mode > 1 && !access(cp, X_OK)) {
 
-    target_path = new_argv[0] = BIN_PATH "/afl-qemu-system-trace";
+    target_path = new_argv[0] = cp;
     return new_argv;
 
   }
