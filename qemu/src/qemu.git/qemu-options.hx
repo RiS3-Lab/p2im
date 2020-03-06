@@ -2754,6 +2754,14 @@ Add named fw_cfg entry from file. @var{name} determines the name of
 the entry in the fw_cfg file directory exposed to the guest.
 ETEXI
 
+DEF("aflFile", HAS_ARG, QEMU_OPTION_aflFile, \
+    "-aflFile fname  AFL input sourced from fname\n", QEMU_ARCH_ALL)
+DEF("aflPanicAddr", HAS_ARG, QEMU_OPTION_aflPanicAddr, \
+    "-aflPanicAddr hexaddr  Address of OS panic function\n", QEMU_ARCH_ALL)
+DEF("aflDmesgAddr", HAS_ARG, QEMU_OPTION_aflDmesgAddr, \
+    "-aflDmesgAddr hexaddr  Address of OS logging function\n", QEMU_ARCH_ALL)
+
+
 DEF("serial", HAS_ARG, QEMU_OPTION_serial, \
     "-serial dev     redirect the serial port to char device 'dev'\n",
     QEMU_ARCH_ALL)

@@ -667,6 +667,26 @@ static void arm_load_kernel_notify(Notifier *notifier, void *data)
                            &elf_low_addr, &elf_high_addr, big_endian,
                            elf_machine, 1);
     if (kernel_size > 0 && have_dtb(info)) {
+        if (info->initrd_filename) {
+            initrd_size = load_ramdisk(info->initrd_filename,
+                                       info->initrd_start,
+                                       info->ram_size -
+                                       info->initrd_start);
+            if (initrd_size < 0) {
+                initrd_size = load_image_targphys(info->initrd_filename,
+                                                  info->initrd_start,
+                                                  info->ram_size -
+                                                  info->initrd_start);
+            }
+            if (initrd_size < 0) {
+                fprintf(stderr, "qemu: could not load initrd '%s'\n",
+                        info->initrd_filename);
+                exit(1);
+            }
+        } else {
+            initrd_size = 0;
+        }
+        info->initrd_size = initrd_size;
         /* If there is still some room left at the base of RAM, try and put
          * the DTB there like we do for images loaded with -bios or -pflash.
          */

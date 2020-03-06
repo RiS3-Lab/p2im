@@ -27,6 +27,8 @@
 #include "exec/address-spaces.h"
 #include "exec/memory-internal.h"
 #include "qemu/rcu.h"
+#include "afl/afl-qemu-cpu-inl.h"
+
 
 /* -icount align implementation. */
 
@@ -174,7 +176,7 @@ void cpu_reload_memory_map(CPUState *cpu)
 #endif
 
 /* Execute a TB, and fix up the CPU state afterwards if necessary */
-static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, uint8_t *tb_ptr)
+static inline tcg_target_ulong cpu_tb_exec(target_ulong pc, CPUState *cpu, uint8_t *tb_ptr)
 {
     CPUArchState *env = cpu->env_ptr;
     uintptr_t next_tb;
@@ -214,13 +216,19 @@ static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, uint8_t *tb_ptr)
             assert(cc->set_pc);
             cc->set_pc(cpu, tb->pc);
         }
+    } else {
+        /* we executed it, trace it */
+        AFL_QEMU_CPU_SNIPPET2(env, pc);
     }
+
     if ((next_tb & TB_EXIT_MASK) == TB_EXIT_REQUESTED) {
         /* We were asked to stop executing TBs (probably a pending
          * interrupt. We've now stopped, so clear the flag.
          */
         cpu->tcg_exit_req = 0;
     }
+    if(afl_wants_cpu_to_stop)
+        cpu->exit_request = 1;
     return next_tb;
 }
 
@@ -247,7 +255,7 @@ static void cpu_exec_nocache(CPUArchState *env, int max_cycles,
     cpu->current_tb = tb;
     /* execute the generated code */
     trace_exec_tb_nocache(tb, tb->pc);
-    cpu_tb_exec(cpu, tb->tc_ptr);
+    cpu_tb_exec(tb->pc, cpu, tb->tc_ptr);
     cpu->current_tb = NULL;
     tb_phys_invalidate(tb, -1);
     tb_free(tb);
@@ -296,7 +304,10 @@ static TranslationBlock *tb_find_slow(CPUArchState *env,
     }
  not_found:
    /* if no translated code available, then translate it now */
+
     tb = tb_gen_code(cpu, pc, cs_base, flags, 0);
+
+    AFL_QEMU_CPU_SNIPPET1;
 
  found:
     /* Move the last found TB to the head of the list */
@@ -492,10 +503,15 @@ int cpu_exec(CPUArchState *env)
                     next_tb = 0;
                     tcg_ctx.tb_ctx.tb_invalidated_flag = 0;
                 }
+
                 if (qemu_loglevel_mask(CPU_LOG_EXEC)) {
                     qemu_log("Trace %p [" TARGET_FMT_lx "] %s\n",
                              tb->tc_ptr, tb->pc, lookup_symbol(tb->pc));
                 }
+/*
+ * chaining complicates AFL's instrumentation so we disable it
+ */
+#ifdef NOPE_NOT_NEVER
                 /* see if we can patch the calling TB. When the TB
                    spans two pages, we cannot safely do a direct
                    jump. */
@@ -503,6 +519,7 @@ int cpu_exec(CPUArchState *env)
                     tb_add_jump((TranslationBlock *)(next_tb & ~TB_EXIT_MASK),
                                 next_tb & TB_EXIT_MASK, tb);
                 }
+#endif
                 have_tb_lock = false;
                 spin_unlock(&tcg_ctx.tb_ctx.tb_lock);
 
@@ -516,7 +533,7 @@ int cpu_exec(CPUArchState *env)
                     trace_exec_tb(tb, tb->pc);
                     tc_ptr = tb->tc_ptr;
                     /* execute the generated code */
-                    next_tb = cpu_tb_exec(cpu, tc_ptr);
+                    next_tb = cpu_tb_exec(tb->pc, cpu, tc_ptr);
                     switch (next_tb & TB_EXIT_MASK) {
                     case TB_EXIT_REQUESTED:
                         /* Something asked us to stop executing
