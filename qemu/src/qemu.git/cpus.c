@@ -43,6 +43,7 @@
 #include "qapi-event.h"
 #include "hw/nmi.h"
 #include "afl/afl.h"
+#include "peri-mod/peri-mod.h"
 
 #ifndef _WIN32
 #include "qemu/compatfd.h"
@@ -1034,6 +1035,8 @@ static void tcg_exec_all(void);
 static int afl_qemuloop_pipe[2];        /* to notify mainloop to become forkserver */
 static CPUState *restart_cpu = NULL;    /* cpu to restart */
 
+int model_loaded = 0;
+
 static void *qemu_tcg_cpu_thread_fn(void *arg)
 {
     CPUState *cpu = arg;
@@ -1061,6 +1064,20 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
 
     /* process any pending work */
     exit_request = 1;
+
+    if(!model_loaded && model_if) {
+        // load model in forkServer proc. Model is already loaded for worker proc
+        if (pm_load_model(&pm_PeripheralList)) {
+            fprintf(stderr, "Fail to load model from file %s!\n", model_if);
+            exit(0x76);
+        }
+        model_loaded = 1;
+    }
+
+    pm_ena = 1;
+
+    if (pm_stage == SR_R_ID || pm_stage == SR_R_EXPLORE)
+         pm_me_ena = 1; // under current impl, equivalent to rc_ena
 
     while (!afl_wants_cpu_to_stop) {
         tcg_exec_all();

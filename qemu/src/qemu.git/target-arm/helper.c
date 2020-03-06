@@ -4528,6 +4528,8 @@ void arm_v6m_cpu_do_interrupt(CPUState *cs)
 }
 #endif /* defined(CONFIG_GNU_ARM_ECLIPSE) */
 
+extern volatile unsigned int bbl_cnt;
+int en_int_for_svc = 0;
 void arm_v7m_cpu_do_interrupt(CPUState *cs)
 {
     ARMCPU *cpu = ARM_CPU(cs);
@@ -4554,6 +4556,11 @@ void arm_v7m_cpu_do_interrupt(CPUState *cs)
         return;
     case EXCP_SWI:
         /* The PC already points to the next instruction.  */
+        // temporarily enable INT to have SVC served in time
+        if (env->daif & PSTATE_I) {
+          env->daif &= ~PSTATE_I;
+          en_int_for_svc = 1;
+        }
         armv7m_nvic_set_pending(env->nvic, ARMV7M_EXCP_SVC);
         return;
     case EXCP_PREFETCH_ABORT:
@@ -4578,9 +4585,17 @@ void arm_v7m_cpu_do_interrupt(CPUState *cs)
         return;
     case EXCP_IRQ:
         env->v7m.exception = armv7m_nvic_acknowledge_irq(env->nvic);
+        qemu_log_mask(CPU_LOG_INT, "\tbbl_cnt %d: Acknowledged IRQ %d\n", 
+          bbl_cnt, env->v7m.exception-16);
         break;
     case EXCP_EXCEPTION_EXIT:
+        // Disable INT if INT is temporarily enabled for SVC
+        if (en_int_for_svc) {
+          env->daif |= PSTATE_I;
+          en_int_for_svc = 0;
+        }
         do_v7m_exception_exit(env);
+        qemu_log_mask(CPU_LOG_INT, "\tbbl_cnt %d: EXCP/ISR exits\n", bbl_cnt);
         return;
     default:
         cpu_abort(cs, "Unhandled exception 0x%x\n", cs->exception_index);

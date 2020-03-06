@@ -883,6 +883,10 @@ int rom_add_elf_program(const char *name, void *data, size_t datasize,
 {
     Rom *rom;
 
+#if defined(CONFIG_GNU_ARM_ECLIPSE)
+    romsize = datasize;
+#endif
+
 #if defined(CONFIG_VERBOSE)
     if (verbosity_level >= VERBOSITY_DETAILED) {
         printf("Load %6zu bytes at 0x%08llX-0x%08llX.\n", romsize, addr, addr+romsize-1);

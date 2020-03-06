@@ -42,6 +42,10 @@
 #define TYPE_STM32F411RE "STM32F411RE"
 #define TYPE_STM32F429ZI "STM32F429ZI"
 
+#define TYPE_NXPLPC4330 "NXPLPC4330"
+#define TYPE_SAM3X8E "SAM3X8E"
+#define TYPE_MK64FN1M0VLL12 "MK64FN1M0VLL12"
+
 /* ------------------------------------------------------------------------- */
 
 /* Parent definitions. */

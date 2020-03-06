@@ -2687,6 +2687,40 @@ STEXI
 ETEXI
 DEFHEADING()
 
+DEFHEADING(IoT fuzzer model extraction and fuzzing specific:)
+STEXI
+@table @option
+ETEXI
+
+DEF("pm-stage", HAS_ARG, QEMU_OPTION_pm_stage, \
+    "-pm-stage int \tindicates which stage we are in: SR_R_ID, SR_R_EXPLORE, FUZZING\n", QEMU_ARCH_ALL)
+
+DEF("model-input", HAS_ARG, QEMU_OPTION_model_if, \
+    "-model-input fname \tperipheral model is loaded from fname before boot-up\n", QEMU_ARCH_ALL)
+
+DEF("model-output", HAS_ARG, QEMU_OPTION_model_of, \
+    "-model-output fname \tperipheral model is dumped into fname before exit\n", QEMU_ARCH_ALL)
+
+DEF("sr-input", HAS_ARG, QEMU_OPTION_SR_r_file, \
+    "-sr-input fname \tinput file for SR_r in SR_R_EXPLORE stage\n", QEMU_ARCH_ALL)
+
+DEF("trace", HAS_ARG, QEMU_OPTION_trace_f, \
+    "-trace fname \texecution trace is dumped into fname, not used in FUZZING stage\n", QEMU_ARCH_ALL)
+
+DEF("reg-acc", HAS_ARG, QEMU_OPTION_reg_acc_f, \
+    "-reg-acc fname \tregister access trace is dumped into fname, not used in FUZZING stage\n", QEMU_ARCH_ALL)
+
+DEF("me-bin", HAS_ARG, QEMU_OPTION_me_bin, \
+    "-me-bin fname \tpath to model extraction binary, only used in FUZZING stage\n", QEMU_ARCH_ALL)
+
+DEF("me-config", HAS_ARG, QEMU_OPTION_me_config, \
+    "-me-config fname \tpath to config file for model extraction binary, only used in FUZZING stage\n", QEMU_ARCH_ALL)
+
+STEXI
+@end table
+ETEXI
+DEFHEADING()
+
 DEFHEADING(Microcontroller/Cortex-M specific:)
 STEXI
 

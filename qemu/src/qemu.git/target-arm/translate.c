@@ -37,6 +37,10 @@
 
 #include "trace-tcg.h"
 
+#if defined(CONFIG_GNU_ARM_ECLIPSE)
+#include "peri-mod/peri-mod.h"
+#include <sys/mman.h>
+#endif
 
 #define ENABLE_ARCH_4T    arm_dc_feature(s, ARM_FEATURE_V4T)
 #define ENABLE_ARCH_5     arm_dc_feature(s, ARM_FEATURE_V5)
@@ -11607,6 +11611,7 @@ void restore_state_to_opc(CPUARMState *env, TranslationBlock *tb, int pc_pos)
 // XXX lots of shared code here could be factored out
 #include "afl/afl.h"
 
+int afl_startfs_invoked = 0;
 static target_ulong startForkserver(CPUArchState *env, target_ulong enableTicks)
 {
     //printf("pid %d: startForkServer\n", getpid()); fflush(stdout);
@@ -11623,6 +11628,10 @@ static target_ulong startForkserver(CPUArchState *env, target_ulong enableTicks)
     afl_setup();
     afl_forkserver(env);
 #else
+    // used by stage 3 and replay with aflFile of stage 1/2
+    afl_startfs_invoked = 1;
+
+    if(pm_stage == FUZZING) {
     /*
      * we're running in a cpu thread. we'll exit the cpu thread
      * and notify the iothread.  The iothread will run the forkserver
@@ -11632,13 +11641,29 @@ static target_ulong startForkserver(CPUArchState *env, target_ulong enableTicks)
      */
     aflEnableTicks = enableTicks;
     afl_wants_cpu_to_stop = 1;
+
+    // merge startWork into startForkserver
+    afl_start_code = 0x0U;
+    afl_end_code   = 0xffffffffU;
+    aflGotLog = 0; // not used
+    aflStart = 1; // start tracing
+    }
 #endif
     return 0;
 }
 
+int pm_ena = 0;
+int pm_rand_i = 0;
+int pm_rand_sz = 0;
+unsigned char pm_rand[PM_RAND_ARR_SIZE];
+
+int pm_me_ena = 0; // 1: model extraction process, 0: fuzzing process
+
 /* copy work into ptr[0..sz].  Assumes memory range is locked. */
+// XXX totally obsolete now
 static target_ulong getWork(CPUArchState *env, target_ulong ptr, target_ulong sz)
 {
+/*
     target_ulong retsz;
     FILE *fp;
     unsigned char ch;
@@ -11660,6 +11685,127 @@ static target_ulong getWork(CPUArchState *env, target_ulong ptr, target_ulong sz
     }
     fclose(fp);
     return retsz;
+*/
+    //printf("pid %d: getWork %lx %lx\n", getpid(), ptr, sz);fflush(stdout);
+    assert(aflStart == 0);
+    /*
+     * file format
+     * syscall records/delimiter 0xF3C7/pm_rand[PM_RAND_ARR_SIZE]
+     */
+    int fd = open(aflFile, O_RDONLY);
+    if (fd == -1) {
+        //perror(__FUNCTION__);
+        perror("open");
+        return -1;
+    }
+
+    struct stat sb;
+    if (stat(aflFile, &sb) == -1) {
+        perror("stat");
+        return -1;
+    }
+    
+    void *mm = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (mm == MAP_FAILED) {
+        perror ("mmap");
+        return -1;
+    }
+
+    void *p_prev = mm, *p;
+    void *end = mm + sb.st_size;
+/*
+    // find last occurence of SEGDELIM in input file
+    // there is a small chance that the supposed PM_RAND contains SEGDELIM
+    while ((p = memmem(p_prev, end - p_prev, SEGDELIM, sizeof SEGDELIM - 1))) {
+        p_prev = p + sizeof SEGDELIM - 1;
+    }
+    if (p_prev == mm) {
+        // not found 
+        fprintf(stderr, "SEGDELIM not found\n");
+        return -1;
+    }
+*/
+
+    target_ulong retsz = 0;
+    char *mm_c = (char *)mm;
+    // find 1st occurence of SEGDELIM
+    if (p = memmem(mm, sb.st_size, SEGDELIM, sizeof SEGDELIM - 1)) {
+        // return 1st half of input(before last SEGDELIM) to fuzzer wrapper
+        // loop cond: bytes available in src buf && btes available in dst buf
+        while(retsz < (p - mm) && retsz < sz) {
+            cpu_stb_data(env, ptr, mm_c[retsz]);
+            retsz ++;
+            ptr ++;
+        }
+        p_prev = p + (sizeof SEGDELIM - 1);
+    }
+
+
+    // p_prev points to 1st byte of pm_rand buffer
+    if ((end - p_prev) < PM_RAND_MIN_SIZE) {
+        // reach EOF before geting all bytes we want
+        // TODO simply exit will waste input
+        // cannot invoke doneWork as aflStart == 0
+        fprintf(stderr, "No enough bytes for PM_RAND, MIN: %d\n", PM_RAND_MIN_SIZE);
+        return -1;
+    }
+
+
+    // copy 2nd half into pm_rand
+    // only copy available data from input into pm_rand
+    // no more than PM_RAND_ARR_SIZE bytes, to avoid buffer overflow
+    pm_rand_sz = ((end - p_prev) > PM_RAND_ARR_SIZE) ? PM_RAND_ARR_SIZE : (end - p_prev);
+    memcpy(pm_rand, p_prev, pm_rand_sz);
+
+    if (munmap(mm, sb.st_size) == -1) {
+        perror("munmap");
+        return -1;
+    }
+    if (close(fd) == -1) {
+        perror("close");
+        return -1;
+    }
+
+//    if (!pm_classified) {
+        // TODO
+        /*
+         * TODO validity check
+         * e.g. pm_Event.stat_reg is SR, pm_Event.ctrl_reg is CR
+         */
+/*
+    } else {
+        #define CLASSIFICATION_NOT_IMPLEMENTED
+        #if defined CLASSIFICATION_NOT_IMPLEMENTED
+        // Omitted fileds are 0'ed
+        static pm_Peripheral peri = {
+            .base_addr = 0x40004800,
+            .regs = {
+                {.type = SR},
+                {.type = DR},
+                {.type = UC},
+                {.type = CR},
+                {.type = CR},
+                {.type = CR},
+                {.type = UC},
+            },
+            .DR_bytes_num = 2,
+            .events = {
+                {.type = EVT_RXNE, .stat_reg = 0, .stat_bit = 5, .ctrl_reg = 3, .ctrl_bit = 5},
+                {.type = EVT_TXE, .stat_reg = 0, .stat_bit = 7, .ctrl_reg = 3, .ctrl_bit = 7},
+                {.type = EVT_TC, .stat_reg = 0, .stat_bit = 6, .ctrl_reg = 3, .ctrl_bit = 6},
+            },
+            .evt_num = 3,
+        };
+        pm_PeripheralList = &peri;
+
+        #else
+        FILE *f = fopen("");
+        pm_PeripheralList = pm_load_model(f);
+        #endif // #if defined CLASSIFICATION_NOT_IMPLEMENTED
+    }
+*/
+
+    return retsz;
 }
 
 static target_ulong startWork(CPUArchState *env, target_ulong start, target_ulong end)
@@ -11674,10 +11820,13 @@ static target_ulong startWork(CPUArchState *env, target_ulong start, target_ulon
     return 0;
 }
 
-static target_ulong doneWork(target_ulong val)
+int aup_reason = 0;
+
+// AFL can only read 8 bits of return val
+target_ulong doneWork(target_ulong val)
 {
     //printf("pid %d: doneWork %lx\n", getpid(), val);fflush(stdout);
-    assert(aflStart == 1);
+    //assert(aflStart == 1);
 /* detecting logging as crashes hasnt been helpful and
    has occasionally been a problem.  We'll leave it to
    a post-analysis phase to look over dmesg output for
@@ -11687,20 +11836,26 @@ static target_ulong doneWork(target_ulong val)
     if(aflGotLog)
         exit(64 | val);
 #endif
-    exit(val); /* exit forkserver child */
-}
 
-// TODO not tested
-static target_ulong qputs(target_ulong val)
-{
-    char buff[20];
-    time_t now = time(NULL);
-    strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
+    printf("doneWork(%d) is invoked!\n", val);
 
-    FILE *fd = fopen("qemu_log", "a");
-    int writed = fprintf(fd, "%s\t0x%x\n", buff, val);
-    fclose(fd);
-    return writed;
+    if(pm_stage == FUZZING) {
+      if (val == PM_UNCAT_REG || val == PM_UNMOD_SRRS) {
+        // log access to unmodeled peripheral
+        // "model" is copied from model_if since not changed
+        aup_reason = val;
+        pm_dump_model(NULL);
+      }
+
+      // TODO move it to AFL so that AFL can document it
+      if (val == 0x71) val = 0;
+      exit(val); /* exit forkserver child */
+/*
+    } else {
+      if (val) exit(0x32);
+      else exit(0x31);
+*/
+    }
 }
 
 uint32_t helper_aflCall32(CPUArchState *env, uint32_t code, uint32_t a0, uint32_t a1) {
@@ -11709,11 +11864,10 @@ uint32_t helper_aflCall32(CPUArchState *env, uint32_t code, uint32_t a0, uint32_
 
 target_ulong helper_aflCall(CPUArchState *env, target_ulong code, target_ulong a0, target_ulong a1) {
     switch(code) {
-    case 1: return (uint32_t)startForkserver(env, a0);
-    case 2: return (uint32_t)getWork(env, a0, a1);
-    case 3: return (uint32_t)startWork(env, a0, a1);
-    case 4: return (uint32_t)doneWork(a0);
-    case 5: return (uint32_t)qputs(a0);
+    case 1: return startForkserver(env, a0);
+    case 2: return getWork(env, a0, a1);
+    case 3: return startWork(env, a0, a1);
+    case 4: return doneWork(a0);
     default: return -1;
     }
 }

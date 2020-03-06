@@ -28,7 +28,10 @@
 #include "exec/memory-internal.h"
 #include "qemu/rcu.h"
 #include "afl/afl-qemu-cpu-inl.h"
-
+// Bo: check whether address range is valid
+#include "hw/arm/cortexm-mcu.h"
+#include "peri-mod/peri-mod.h"
+#include "peri-mod/interrupt.h"
 
 /* -icount align implementation. */
 
@@ -175,8 +178,14 @@ void cpu_reload_memory_map(CPUState *cpu)
 }
 #endif
 
+volatile unsigned int bbl_cnt = 0;
+volatile unsigned int target_bbl_cnt = 0;
+volatile unsigned int bbl_cnt_last_me = 0;
+volatile int expl_started = 0;
+volatile int int_round = 0;
+
 /* Execute a TB, and fix up the CPU state afterwards if necessary */
-static inline tcg_target_ulong cpu_tb_exec(target_ulong pc, CPUState *cpu, uint8_t *tb_ptr)
+static inline tcg_target_ulong cpu_tb_exec(target_ulong pc, CPUState *cpu, uint8_t *tb_ptr, uint16_t size)
 {
     CPUArchState *env = cpu->env_ptr;
     uintptr_t next_tb;
@@ -217,8 +226,89 @@ static inline tcg_target_ulong cpu_tb_exec(target_ulong pc, CPUState *cpu, uint8
             cc->set_pc(cpu, tb->pc);
         }
     } else {
-        /* we executed it, trace it */
-        AFL_QEMU_CPU_SNIPPET2(env, pc);
+      /* we executed it, trace it */
+      AFL_QEMU_CPU_SNIPPET2(env, pc);
+
+      bbl_cnt ++;
+
+      // Handle fuzzing specific operations first to speed up it
+      if ((pm_stage == FUZZING || 
+        (pm_stage == SR_R_ID || pm_stage == SR_R_EXPLORE) && 
+        aflFile && bbl_cnt <= replay_bbl_cnt)) {
+        // During fuzzing or replay process in ME
+
+        // interrupt firing: one interrupt/FUZZING_INT_FREQ executed
+        // after startForkserver is invoked
+        if (afl_startfs_invoked) {
+          if (bbl_cnt % FUZZING_INT_FREQ == 0)
+            pm_fire_interrupt();
+        }
+
+        // unmodelled SR read detected
+        // stage Fuzzing handles in that SR_r and won't reach here
+        // current impl is for on-demand ME only: CR_ins del all SMR
+        // and during replay we need to do SMR
+        // TODO make impl uniform
+        if (pm_stage == SR_R_ID && cur_bbl_SR_r_num) {
+          sr_func = lookup_symbol(cur_bbl_s);
+          // info dumped by pm_dump_model:
+          // sr_func, cur_bbl_s, bbl_cnt, cur_bbl_SR_r_num
+          // bbl_cnt dumped includes the bbl which SR_r happens
+          stage_termination(SR_R_ID);
+          if (SR_cat_by_fixup) exit(0x19);
+          else exit(0x20);
+        }
+
+        // dump trace for coverage calculation in stage FUZZING and 
+        // replay process for stage 1. 
+        // For stage 2, we only dump trace after expl_started
+        if (trace_f && pm_stage != SR_R_EXPLORE)
+          fprintf(trace_f, "BBL (0x%x, 0x%x) [%s]\n", pc, pc+size,
+            lookup_symbol(pc));
+
+      } else {
+        // stage 1/2 && not doing replay
+
+        // must do this before setting expl_started
+        if (pm_stage == SR_R_ID || (pm_stage == SR_R_EXPLORE && expl_started))
+          fprintf(trace_f, "BBL (0x%x, 0x%x) [%s]\n", pc, pc+size, 
+            lookup_symbol(pc));
+
+        if (pm_stage == SR_R_ID && cur_bbl_SR_r_num) {
+          sr_func = lookup_symbol(cur_bbl_s);
+          // info dumped by pm_dump_model:
+          // sr_func, cur_bbl_s, bbl_cnt, cur_bbl_SR_r_num
+          // bbl_cnt dumped includes the bbl which SR_r happens
+          stage_termination(SR_R_ID);
+          if (SR_cat_by_fixup) exit(0x19);
+          else exit(0x20);
+        }
+
+        if (pm_stage == SR_R_EXPLORE) {
+          // expl_started = 1 when bbl that does SR read has been executed
+          expl_started = bbl_cnt >= target_bbl_cnt ? 1 : 0;
+
+          // worker cannot run forever
+          if (expl_started && (bbl_cnt - target_bbl_cnt > SR_R_WORKER_BBL_CNT_CAP)) {
+            // traeat as func_ret
+            stage_termination(SR_R_EXPLORE);
+            exit(0x21);
+          }
+        }
+
+        // During ME, fire interrupt every ME_TERM_THRESHOLD BBL.
+        // exit after every interrupt is fired INT_ROUND times
+        if ((pm_stage == SR_R_ID || pm_stage == SR_R_EXPLORE) && 
+          (bbl_cnt - bbl_cnt_last_me) >= ME_TERM_THRESHOLD) {
+          if (int_round < INT_ROUND) {
+            pm_fire_interrupt();
+            bbl_cnt_last_me = bbl_cnt;
+          } else if (pm_stage == SR_R_ID) {
+            stage_termination(SR_R_ID);
+            exit(0x30);
+          }
+        }
+      }
     }
 
     if ((next_tb & TB_EXIT_MASK) == TB_EXIT_REQUESTED) {
@@ -229,6 +319,7 @@ static inline tcg_target_ulong cpu_tb_exec(target_ulong pc, CPUState *cpu, uint8
     }
     if(afl_wants_cpu_to_stop)
         cpu->exit_request = 1;
+
     return next_tb;
 }
 
@@ -255,7 +346,7 @@ static void cpu_exec_nocache(CPUArchState *env, int max_cycles,
     cpu->current_tb = tb;
     /* execute the generated code */
     trace_exec_tb_nocache(tb, tb->pc);
-    cpu_tb_exec(tb->pc, cpu, tb->tc_ptr);
+    cpu_tb_exec(tb->pc, cpu, tb->tc_ptr, tb->size);
     cpu->current_tb = NULL;
     tb_phys_invalidate(tb, -1);
     tb_free(tb);
@@ -369,6 +460,7 @@ int cpu_exec(CPUArchState *env)
     int ret, interrupt_request;
     TranslationBlock *tb;
     uint8_t *tc_ptr;
+    // last executed tb, used to check exec ret_val & for bbl chainin
     uintptr_t next_tb;
     SyncClocks sc;
 
@@ -532,8 +624,32 @@ int cpu_exec(CPUArchState *env)
                 if (likely(!cpu->exit_request)) {
                     trace_exec_tb(tb, tb->pc);
                     tc_ptr = tb->tc_ptr;
+
+                    if (pm_stage == SR_R_EXPLORE && expl_started &&
+                        (is_sr_func_ret_addr(tb->pc) || tb->pc > 0xfffffff0U)) {
+                        stage_termination(SR_R_EXPLORE);
+                        exit(0x21);
+                    }
+
+                    // Bo: record current bbl for unassigned_mem_read/write
+                    cur_bbl_s = tb->pc;
+                    cur_bbl_e = tb->pc+tb->size;
+
+                    // Bo: check whether address range is valid
+                    extern CortexMState *cs_g;
+                    if (!(cs_g->flash_base <= tb->pc && tb->pc < (cs_g->flash_base+(cs_g->flash_size_kb<<10))
+        || cs_g->sram_base <= tb->pc && tb->pc < (cs_g->sram_base+(cs_g->sram_size_kb<<10))
+        || cs_g->sram_size_kb2 && cs_g->sram_base2 <= tb->pc && tb->pc < (cs_g->sram_base2+(cs_g->sram_size_kb2<<10))
+        || cs_g->sram_size_kb3 && cs_g->sram_base3 <= tb->pc && tb->pc < (cs_g->sram_base3+(cs_g->sram_size_kb3<<10))
+                        //|| 0 <= tb->pc && tb->pc < (cs_g->flash_size_kb<<10)
+                        //|| 0x0U <= tb->pc && tb->pc < 0x1000U
+                        || 0xFFFFFFF0U <= tb->pc && tb->pc <= 0xFFFFFFFFU)) {
+                        printf("[%x, %x] illegal exec at 0x%x\n", cur_bbl_s, cur_bbl_e, tb->pc);
+                        exit(-1);
+                    }
+
                     /* execute the generated code */
-                    next_tb = cpu_tb_exec(tb->pc, cpu, tc_ptr);
+                    next_tb = cpu_tb_exec(tb->pc, cpu, tc_ptr, tb->size);
                     switch (next_tb & TB_EXIT_MASK) {
                     case TB_EXIT_REQUESTED:
                         /* Something asked us to stop executing

@@ -112,19 +112,32 @@ static void stm32_mcu_realize_callback(DeviceState *dev, Error **errp)
         CortexMState *cm_state = CORTEXM_MCU_STATE(dev);
         int flash_size = cm_state->flash_size_kb * 1024;
 
-        /* Allocate a new region for the alias */
-        MemoryRegion *flash_alias_mem = g_malloc(sizeof(MemoryRegion));
+        // Bo: sink: propagation 3, flash alias workaround
+        // Bo: check flash_base, if not 0, create alias region
+        // TODO: might cause region overlapping w/ ram or orig flash w/ small chance
+        uint32_t flash_base = cm_state->flash_base;
+        if (flash_base) {
+            if (flash_base < 0x0 + flash_size ) {
+                fprintf(stderr, "alias region overlap with original region!\n");
+                fprintf(stderr, "flash_base %u, size %d", flash_base, flash_size);
+                abort();
+            }
 
-        Object *mem_container = container_get(cm_state->container, "/memory");
+            /* Allocate a new region for the alias */
+            MemoryRegion *flash_alias_mem = g_malloc(sizeof(MemoryRegion));
 
-        /* Initialise the new region */
-        memory_region_init_alias(flash_alias_mem, mem_container,
-                "mem-flash-alias", &cm_state->flash_mem, 0, flash_size);
-        memory_region_set_readonly(flash_alias_mem, true);
+            Object *mem_container = container_get(cm_state->container, "/memory");
 
-        /* Alias it as the STM specific 0x08000000 */
-        memory_region_add_subregion(get_system_memory(), 0x08000000,
-                flash_alias_mem);
+            /* Initialise the new region */
+            memory_region_init_alias(flash_alias_mem, mem_container,
+                     "mem-flash-alias", &cm_state->flash_mem, 0, flash_size);
+            memory_region_set_readonly(flash_alias_mem, true);
+
+            /* Alias it as the STM specific 0x08000000 */
+            //memory_region_add_subregion(get_system_memory(), 0x08000000,
+            memory_region_add_subregion(get_system_memory(), cm_state->flash_base,
+                    flash_alias_mem);
+        }
     }
 
     /* Peripheral bitband. */
@@ -135,6 +148,7 @@ static void stm32_mcu_realize_callback(DeviceState *dev, Error **errp)
         }
     }
 
+#if 0
     /* RCC */
     {
         /* RCC will be named "/machine/mcu/stm32/rcc" */
@@ -222,6 +236,7 @@ static void stm32_mcu_realize_callback(DeviceState *dev, Error **errp)
 
     /* TODO: add more devices. */
 
+#endif
 }
 
 static void stm32_mcu_reset_callback(DeviceState *dev)

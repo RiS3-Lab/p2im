@@ -22,6 +22,8 @@
 #include "gic_internal.h"
 #include "qom/cpu.h"
 
+#include "peri-mod/interrupt.h"
+
 //#define DEBUG_GIC
 
 #ifdef DEBUG_GIC
@@ -718,6 +720,9 @@ static void gic_dist_writeb(void *opaque, hwaddr offset,
                     DPRINTF("Enabled IRQ %d\n", irq + i);
                 }
                 GIC_SET_ENABLED(irq + i, cm);
+
+                pm_enable_interrupt(irq + i - 16);
+
                 /* If a raised level triggered IRQ enabled then mark
                    is as pending.  */
                 if (GIC_TEST_LEVEL(irq + i, mask)
@@ -744,6 +749,8 @@ static void gic_dist_writeb(void *opaque, hwaddr offset,
                     DPRINTF("Disabled IRQ %d\n", irq + i);
                 }
                 GIC_CLEAR_ENABLED(irq + i, cm);
+
+                pm_disable_interrupt(irq + i - 16);
             }
         }
     } else if (offset < 0x280) {

@@ -130,6 +130,7 @@ static QEMUMachine stm32f4_discovery2_machine = {
 
 /* ----- ST STM32F429I-Discovery ----- */
 
+#if 0
 static GPIOLEDInfo stm32f429i_discovery_leds_info[] = {
     {
         .name = "green-led",
@@ -153,6 +154,7 @@ static GPIOLEDInfo stm32f429i_discovery_leds_info[] = {
         .port_bit = 14, },
     { }, /**/
 };
+#endif
 
 static void stm32f429i_discovery_board_init_callback(MachineState *machine)
 {
@@ -173,14 +175,190 @@ static void stm32f429i_discovery_board_init_callback(MachineState *machine)
             cm_board_get_desc(machine));
 
     Object *peripheral = cm_container_get_peripheral();
-    gpio_led_create_from_info(peripheral, stm32f429i_discovery_leds_info,
-            board_surface);
+    //gpio_led_create_from_info(peripheral, stm32f429i_discovery_leds_info,
+    //        board_surface);
 }
 
 static QEMUMachine stm32f429i_discovery_machine = {
     .name = "STM32F429I-Discovery",
     .desc = "ST Discovery kit for STM32F429/439 lines",
     .init = stm32f429i_discovery_board_init_callback };
+
+// Bo: copy and slightly modified from STM32F429I-Discovery
+// defines board
+/* ----- NXP LPC4330 ----- */
+
+#if 0
+static GPIOLEDInfo nxp_lpc4330_leds_info[] = {
+    {
+        .name = "green-led",
+        .active_low = false,
+        .colour_message = "Green",
+        .x = 519,
+        .y = 109,
+        .w = 10,
+        .h = 8,
+        .gpio_path = "/machine/mcu/stm32/gpio[g]",
+        .port_bit = 13, },
+    {
+        .name = "red-led",
+        .active_low = false,
+        .colour_message = "Red",
+        .x = 519,
+        .y = 130,
+        .w = 10,
+        .h = 8,
+        .gpio_path = "/machine/mcu/stm32/gpio[g]",
+        .port_bit = 14, },
+    { }, /**/
+};
+#endif
+
+static void nxp_lpc4330_board_init_callback(MachineState *machine)
+{
+    cm_board_greeting(machine);
+
+    {
+        /* Create the MCU */
+        Object *mcu = cm_object_new_mcu(machine, TYPE_NXPLPC4330);
+
+        /* Set the board specific oscillator frequencies. */
+        cm_object_property_set_int(mcu, 8000000, "hse-freq-hz"); /* 8.0 MHz */
+        cm_object_property_set_int(mcu, 32768, "lse-freq-hz"); /* 32 kHz */
+
+        cm_object_realize(mcu);
+    }
+
+    void *board_surface = cm_board_init_image("STM32F429I-Discovery.jpg",
+            cm_board_get_desc(machine));
+
+    Object *peripheral = cm_container_get_peripheral();
+    //gpio_led_create_from_info(peripheral, nxp_lpc4330_leds_info,
+    //        board_surface);
+}
+
+static QEMUMachine nxp_lpc4330_machine = {
+    .name = "NXP-LPC4330",
+    .desc = "NXP-LPC4330 MCU, boards unknown",
+    .init = nxp_lpc4330_board_init_callback };
+
+
+// Bo: copy and slightly modified from STM32F429I-Discovery
+// defines board
+/* ----- Arduino Due ----- */
+
+#if 0
+static GPIOLEDInfo arduino_due_leds_info[] = {
+    {
+        .name = "green-led",
+        .active_low = false,
+        .colour_message = "Green",
+        .x = 519,
+        .y = 109,
+        .w = 10,
+        .h = 8,
+        .gpio_path = "/machine/mcu/stm32/gpio[g]",
+        .port_bit = 13, },
+    {
+        .name = "red-led",
+        .active_low = false,
+        .colour_message = "Red",
+        .x = 519,
+        .y = 130,
+        .w = 10,
+        .h = 8,
+        .gpio_path = "/machine/mcu/stm32/gpio[g]",
+        .port_bit = 14, },
+    { }, /**/
+};
+#endif
+
+static void arduino_due_board_init_callback(MachineState *machine)
+{
+    cm_board_greeting(machine);
+
+    {
+        /* Create the MCU */
+        Object *mcu = cm_object_new_mcu(machine, TYPE_SAM3X8E);
+
+        /* Set the board specific oscillator frequencies. */
+        cm_object_property_set_int(mcu, 8000000, "hse-freq-hz"); /* 8.0 MHz */
+        cm_object_property_set_int(mcu, 32768, "lse-freq-hz"); /* 32 kHz */
+
+        cm_object_realize(mcu);
+    }
+
+    void *board_surface = cm_board_init_image("STM32F429I-Discovery.jpg",
+            cm_board_get_desc(machine));
+
+    Object *peripheral = cm_container_get_peripheral();
+    //gpio_led_create_from_info(peripheral, arduino_due_leds_info,
+    //        board_surface);
+}
+
+static QEMUMachine arduino_due_machine = {
+    .name = "Arduino-Due",
+    .desc = "Arduino Due board with SAM3X8E MCU",
+    .init = arduino_due_board_init_callback };
+
+
+// Bo: copy and slightly modified from STM32F429I-Discovery
+// defines board
+/* ----- FRDM-K64F ----- */
+
+#if 0
+static GPIOLEDInfo frdm_k64f_leds_info[] = {
+    {
+        .name = "green-led",
+        .active_low = false,
+        .colour_message = "Green",
+        .x = 519,
+        .y = 109,
+        .w = 10,
+        .h = 8,
+        .gpio_path = "/machine/mcu/stm32/gpio[g]",
+        .port_bit = 13, },
+    {
+        .name = "red-led",
+        .active_low = false,
+        .colour_message = "Red",
+        .x = 519,
+        .y = 130,
+        .w = 10,
+        .h = 8,
+        .gpio_path = "/machine/mcu/stm32/gpio[g]",
+        .port_bit = 14, },
+    { }, /**/
+};
+#endif
+
+static void frdm_k64f_board_init_callback(MachineState *machine)
+{
+    cm_board_greeting(machine);
+
+    {
+        /* Create the MCU */
+        Object *mcu = cm_object_new_mcu(machine, TYPE_MK64FN1M0VLL12);
+
+        /* Set the board specific oscillator frequencies. */
+        cm_object_property_set_int(mcu, 8000000, "hse-freq-hz"); /* 8.0 MHz */
+        cm_object_property_set_int(mcu, 32768, "lse-freq-hz"); /* 32 kHz */
+
+        cm_object_realize(mcu);
+    }
+
+    void *board_surface = cm_board_init_image("STM32F429I-Discovery.jpg",
+            cm_board_get_desc(machine));
+
+    Object *peripheral = cm_container_get_peripheral();
+    //gpio_led_create_from_info(peripheral, frdm_k64f_leds_info,
+    //        board_surface);
+}
+
+static QEMUMachine frdm_k64f_machine = {
+    .name = "FRDM-K64F",
+    .desc = "FRDM-K64F board with MK64FN1M0VLL12 MCU",
+    .init = frdm_k64f_board_init_callback };
 
 #if 0
 /* ----- ST STM32F3-Discovery ----- */
@@ -241,6 +419,10 @@ static void stm32_machines_init(void)
     qemu_register_machine(&stm32f4_discovery_machine);
     qemu_register_machine(&stm32f4_discovery2_machine);
     qemu_register_machine(&stm32f429i_discovery_machine);
+    // Bo
+    qemu_register_machine(&nxp_lpc4330_machine);
+    qemu_register_machine(&arduino_due_machine);
+    qemu_register_machine(&frdm_k64f_machine);
 #if 0
     qemu_register_machine(&stm32f3_discovery_machine);
     qemu_register_machine(&stm32f0_discovery_machine);

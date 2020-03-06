@@ -33,6 +33,8 @@
 #include "hw/arm/cortexm-helper.h"
 #include "qemu/error-report.h"
 
+#include "peri-mod/interrupt.h"
+
 /* ----- Public ------------------------------------------------------------ */
 
 /* TODO: use these instead of armv7m_nvic_*(). */
@@ -126,6 +128,7 @@ static void systick_reload(CortexMNVICState *s, int reset)
 
 static void systick_timer_tick(void * opaque)
 {
+    return;
     CortexMNVICState *s = (CortexMNVICState *) opaque;
     s->systick.control |= SYSTICK_COUNTFLAG;
     if (s->systick.control & SYSTICK_TICKINT) {
@@ -326,6 +329,10 @@ static void nvic_writel(CortexMNVICState *s, uint32_t offset, uint32_t value)
         if ((oldval ^ value) & SYSTICK_ENABLE) {
             int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
             if (value & SYSTICK_ENABLE) {
+                // enable systick
+                // fire systick per xxx bbl_cnt
+                pm_enable_interrupt(ARMV7M_EXCP_SYSTICK);
+
                 if (s->systick.tick) {
                     s->systick.tick += now;
                     timer_mod(s->systick.timer, s->systick.tick);
@@ -333,6 +340,10 @@ static void nvic_writel(CortexMNVICState *s, uint32_t offset, uint32_t value)
                     systick_reload(s, 1);
                 }
             } else {
+                // disable systick
+                // fire systick per xxx bbl_cnt
+                pm_disable_interrupt(ARMV7M_EXCP_SYSTICK);
+
                 timer_del(s->systick.timer);
                 s->systick.tick -= now;
                 if (s->systick.tick < 0)
@@ -525,6 +536,7 @@ static void cortexm_nvic_instance_init_callback(Object *obj)
     s->num_irq = 64;
 }
 
+pm_Interrupt *pm_interrupt;
 static void cortexm_nvic_realize_callback(DeviceState *dev, Error **errp)
 {
     qemu_log_function_name();
@@ -578,6 +590,10 @@ static void cortexm_nvic_realize_callback(DeviceState *dev, Error **errp)
      */
     memory_region_add_subregion(get_system_memory(), 0xe000e000, &s->container);
     s->systick.timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, systick_timer_tick, s);
+
+    pm_interrupt = g_malloc(sizeof(pm_Interrupt));
+    memset(pm_interrupt, 0, sizeof(pm_Interrupt));
+    pm_interrupt->s = s;
 }
 
 static void cortexm_nvic_reset_callback(DeviceState *dev)

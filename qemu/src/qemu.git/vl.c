@@ -134,6 +134,14 @@ int main(int argc, char **argv)
 #define MAX_VIRTIO_CONSOLES 1
 #define MAX_SCLP_CONSOLES 1
 
+const char *SR_r_file;
+const char *model_if;
+const char *model_of;
+FILE *trace_f;
+FILE *reg_acc_f;
+const char *me_bin;
+const char *me_config;
+
 extern const char *aflFile;
 extern unsigned long aflPanicAddr;
 extern unsigned long aflDmesgAddr;
@@ -3057,6 +3065,8 @@ static void set_memory_options(uint64_t *ram_slots, ram_addr_t *maxram_size,
     }
 }
 
+int pm_stage; // doesn't use pm_stage_t due to #incldue peri-mod/peri-mod.h failed
+
 int main(int argc, char **argv, char **envp)
 {
     int i;
@@ -3255,6 +3265,14 @@ int main(int argc, char **argv, char **envp)
                 qemu_opts_parse_noisily(olist, "kernel_irqchip=off", false);
                 break;
             }
+            case QEMU_OPTION_pm_stage:
+                pm_stage = atoi(optarg);
+                if (pm_stage <= 0 || pm_stage > 3) {
+                    // TODO adjust the range when we have new stages
+                    fprintf(stderr, "Invalid pm_stage val: %s\n", optarg);
+                    exit(-1);
+                }
+                break;
             case QEMU_OPTION_cpu:
                 /* hw initialization will check this */
                 cpu_model = optarg;
@@ -3410,6 +3428,37 @@ int main(int argc, char **argv, char **envp)
                               &error_abort);
                 break;
 #endif
+            case QEMU_OPTION_SR_r_file:
+                SR_r_file = (char *)optarg;
+                break;
+            case QEMU_OPTION_model_if:
+                model_if = (char *)optarg;
+                break;
+            case QEMU_OPTION_model_of:
+                model_of = (char *)optarg;
+                break;
+            case QEMU_OPTION_trace_f:
+                trace_f = fopen((char *)optarg, "w");
+                if (!trace_f) {
+                    fprintf(stderr, "fail to open trace file!\n");
+                    exit(0x10);
+                }
+                break;
+            case QEMU_OPTION_reg_acc_f:
+                reg_acc_f = fopen((char *)optarg, "w");
+                if (!reg_acc_f) {
+                    fprintf(stderr, "fail to open reg_acc file!\n");
+                    exit(0x10);
+                }
+                break;
+            case QEMU_OPTION_me_bin:
+                me_bin = (char *)optarg;
+                break;
+
+            case QEMU_OPTION_me_config:
+                me_config = (char *)optarg;
+                break;
+
             case QEMU_OPTION_aflFile:
                 aflFile = (char *)optarg;
                 break;

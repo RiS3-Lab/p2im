@@ -30,6 +30,8 @@
 #include "afl/afl.h"
 #include "afl/config.h"
 
+#include "peri-mod/peri-mod.h"
+
 /***************************
  * VARIOUS AUXILIARY STUFF *
  ***************************/
@@ -76,7 +78,7 @@ int aflEnableTicks = 0;         /* re-enable ticks for each test */
 int aflGotLog = 0;              /* we've seen dmesg logging */
 
 /* from command line options */
-const char *aflFile = "/tmp/work";
+const char *aflFile = NULL;
 unsigned long aflPanicAddr = (unsigned long)-1;
 unsigned long aflDmesgAddr = (unsigned long)-1;
 
@@ -168,6 +170,8 @@ static ssize_t uninterrupted_read(int fd, void *buf, size_t cnt)
     return n;
 }
 
+int run_num = 1;
+
 /* Fork server logic, invoked once we hit _start. */
 
 void afl_forkserver(CPUArchState *env) {
@@ -228,8 +232,44 @@ void afl_forkserver(CPUArchState *env) {
     /* Get and relay exit status to parent. */
 
     if (waitpid(child_pid, &status, 0) < 0) exit(6);
+
     if (write(FORKSRV_FD + 1, &status, 4) != 4) exit(7);
 
+    if (WIFEXITED(status) && (WEXITSTATUS(status) == PM_UNCAT_REG || 
+        WEXITSTATUS(status) == PM_UNMOD_SRRS)) {
+        // Fuzzer run terminated by access to unmodeled peripheral
+        pid_t me_pid;
+        int me_status;
+
+        // timer in AFL is stopped by write(FORKSRV_FD + 1, &status, 4)
+
+        // run me.py
+        me_pid = fork();
+        if (me_pid < 0) exit(4);
+        if (!me_pid) {
+            // Child
+            char run_num_str[8];
+            snprintf(run_num_str, 8, "%d", run_num);
+            char *argv[] = {me_bin, "--config", me_config, 
+                "--run-num", run_num_str, "--print-to-file", 
+                "--run-from-forkserver", 
+                // worker dumps access to unmodeled peri into model_if
+                "--afl-file", aflFile, "--model-if", model_if, NULL};
+            execv(me_bin, argv);
+        } else {
+            // Parent
+            if (waitpid(me_pid, &me_status, 0) < 0) exit(6);
+
+            pm_PeripheralList = pm_reload_model();
+            run_num ++;
+
+            // notify AFL me.py exits
+            status = PM_ME_EXIT;
+            if (write(FORKSRV_FD + 1, &status, 4) != 4) exit(7);
+
+            // afl will instruct fork server to rerun the terminated fuzzer run
+        }
+    }
   }
 
 }

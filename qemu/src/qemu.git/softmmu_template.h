@@ -24,6 +24,8 @@
 #include "qemu/timer.h"
 #include "exec/address-spaces.h"
 #include "exec/memory.h"
+// Bo: check whether address range is valid
+#include "include/hw/arm/cortexm-mcu.h"
 
 #define DATA_SIZE (1 << SHIFT)
 
@@ -165,6 +167,10 @@ static inline DATA_TYPE glue(io_read, SUFFIX)(CPUArchState *env,
 }
 #endif
 
+// Bo: check whether address range is valid
+extern CortexMState *cs_g;
+extern uint32_t cur_bbl_s, cur_bbl_e;
+
 #ifdef SOFTMMU_CODE_ACCESS
 static __attribute__((unused))
 #endif
@@ -176,6 +182,19 @@ WORD_TYPE helper_le_ld_name(CPUArchState *env, target_ulong addr,
     target_ulong tlb_addr = env->tlb_table[mmu_idx][index].ADDR_READ;
     uintptr_t haddr;
     DATA_TYPE res;
+
+    // Bo: check whether address range is valid
+    if (!(cs_g->flash_base <= addr && addr < (cs_g->flash_base+(cs_g->flash_size_kb<<10))
+        || 0xFFFFFFF8U <= addr && addr <= 0xFFFFFFFFU
+        || cs_g->sram_base <= addr && addr < (cs_g->sram_base+(cs_g->sram_size_kb<<10))
+        || cs_g->sram_size_kb2 && cs_g->sram_base2 <= addr && addr < (cs_g->sram_base2+(cs_g->sram_size_kb2<<10))
+        || cs_g->sram_size_kb3 && cs_g->sram_base3 <= addr && addr < (cs_g->sram_base3+(cs_g->sram_size_kb3<<10))
+        //|| 0x40000000U <= addr && addr < 0x40030000U
+        || 0x40000000U <= addr && addr < 0x44000000U
+        || 0xE0000000U <= addr && addr < 0xE0100000U)) {
+        printf("[%x, %x] illegal read at 0x%x\n", cur_bbl_s, cur_bbl_e, addr);
+        exit(-1);
+    }
 
     /* Adjust the given return address.  */
     retaddr -= GETPC_ADJ;
@@ -391,6 +410,17 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
     int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     target_ulong tlb_addr = env->tlb_table[mmu_idx][index].addr_write;
     uintptr_t haddr;
+
+    // Bo: check whether address range is valid
+    if (!(cs_g->sram_base <= addr && addr < (cs_g->sram_base+(cs_g->sram_size_kb<<10))
+        || cs_g->sram_size_kb2 && cs_g->sram_base2 <= addr && addr < (cs_g->sram_base2+(cs_g->sram_size_kb2<<10))
+        || cs_g->sram_size_kb3 && cs_g->sram_base3 <= addr && addr < (cs_g->sram_base3+(cs_g->sram_size_kb3<<10))
+        //|| 0x40000000U <= addr && addr < 0x40030000U
+        || 0x40000000U <= addr && addr < 0x44000000U
+        || 0xE0000000U <= addr && addr < 0xE0100000U)) {
+        printf("[%x, %x] illegal write at 0x%x\n", cur_bbl_s, cur_bbl_e, addr);
+        exit(-1);
+    }
 
     /* Adjust the given return address.  */
     retaddr -= GETPC_ADJ;

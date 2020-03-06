@@ -689,7 +689,10 @@ static const STM32PartInfo stm32_mcus[] = {
     {
         .name = TYPE_STM32F103RB, /* STM32F103x[8B] */
         .cortexm = {
+            .flash_base = 0x08000000,
             .flash_size_kb = 128,
+
+            .sram_base = 0x20000000,
             .sram_size_kb = 20,
             .core = &stm32f1xx_core, /**/
         },
@@ -707,7 +710,10 @@ static const STM32PartInfo stm32_mcus[] = {
     {
         .name = TYPE_STM32L152RE,
         .cortexm = {
+            .flash_base = 0x08000000,
             .flash_size_kb = 384, /* 384+12 EEPROM */
+
+            .sram_base = 0x20000000,
             .sram_size_kb = 48,
             .core = &stm32f152_core, /**/
         },
@@ -776,11 +782,72 @@ static const STM32PartInfo stm32_mcus[] = {
     {
         .name = TYPE_STM32F429ZI,
         .cortexm = {
+            .flash_base = 0x08000000,
             .flash_size_kb = 2048,
-            .sram_size_kb = 192, /* 64K CCM not counted */
+
+            .sram_base = 0x20000000,
+            .sram_size_kb = 192,
+            .sram_base2 = 0x10000000,
+            .sram_size_kb2 = 64,
+            // FMC control register accessed by NUTTX
+            .sram_base3 = 0xa0000000,
+            .sram_size_kb3 = 4,
             .core = &stm32f4_23_xxx_core, /* TODO: Add .stm32 */
         },
         .stm32 = &stm32f429xx /**/
+
+    },
+    {
+        // Bo: src: propagation 0
+        // defines MCU
+        .name = TYPE_NXPLPC4330,
+        .cortexm = {
+            .flash_base = 0x14000000,
+            .flash_size_kb = 32768,
+
+            .sram_base = 0x10000000,
+            .sram_size_kb = 128,
+            .sram_base2 = 0x10080000,
+            .sram_size_kb2 = 72,
+            .sram_base3 = 0x20000000,
+            .sram_size_kb3 = 64,
+            .core = &stm32f4_23_xxx_core, // borrow from STM32F429ZI
+        },
+        .stm32 = &stm32f429xx // borrow from STM32F429ZI
+
+    },
+    {
+        .name = TYPE_SAM3X8E,
+        .cortexm = {
+            .flash_base = 0x00080000,
+            .flash_size_kb = 512,
+             // RAM0: 0x20000000, 64KB, mirrored to 0x20070000
+             // RAM1: 0x20080000, 32KB
+             // XXX RAM0 is allocated twice in emulator w/o mirroring
+             // RIOT, Arduino, NUTTX only accesses one of them, so it works
+            .sram_base = 0x20000000,
+            .sram_size_kb = 64,
+            .sram_base2 = 0x20070000,
+            .sram_size_kb2 =96,
+            // NFC RAM
+            .sram_base3 = 0x20100000,
+            .sram_size_kb3 = 4,
+            .core = &stm32f4_23_xxx_core, // borrow from STM32F429ZI
+        },
+        .stm32 = &stm32f429xx // borrow from STM32F429ZI
+
+    },
+    {
+        .name = TYPE_MK64FN1M0VLL12,
+        .cortexm = {
+            .flash_base = 0x0,
+            .flash_size_kb = 1024,
+
+            .sram_base = 0x1FFF0000,
+            .sram_size_kb = 256,
+            .core = &stm32f4_23_xxx_core, // borrow from STM32F429ZI
+        },
+        .stm32 = &stm32f429xx // borrow from STM32F429ZI
 
     },
     {
@@ -801,8 +868,15 @@ static void stm32_mcus_realize_callback(DeviceState *dev, Error **errp)
      * Set additional constructor parameters, that were passed via
      * the .class_data and copied to custom class member.
      */
+    /*
+     * Bo: propagation 1
+     * part_info->cortexm stores flash/ram base/size, defined right above
+     * dev is later used as CortexMState struct, this function makes capbility
+     * point to part_info_cortem. Capability is used in cortexm_mcu_realize_callback
+     */
     qdev_prop_set_ptr(dev, "cortexm-capabilities",
             (void *) &part_info->cortexm);
+    // Bo: part_info->stm32 stores peri
     qdev_prop_set_ptr(dev, "stm32-capabilities", (void *) part_info->stm32);
 
     /*

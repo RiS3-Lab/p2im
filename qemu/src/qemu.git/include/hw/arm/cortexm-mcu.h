@@ -76,9 +76,16 @@ typedef struct {
  * It is copied into the CortexMState during *_instance_init() functions.
  */
 typedef struct {
-
+    // Bo: change to support 3 sram + 1 flash w/ base + size
+    const uint32_t flash_base;
     const uint32_t flash_size_kb; /* size of main program area, in KB */
+    // Bo: in ascending order of sram_base
+    const uint32_t sram_base;
     const uint32_t sram_size_kb; /* size of main RAM area, in KB */
+    const uint32_t sram_base2;
+    const uint32_t sram_size_kb2;
+    const uint32_t sram_base3;
+    const uint32_t sram_size_kb3;
 
     const CortexMCoreCapabilities *core;
 
@@ -143,14 +150,30 @@ typedef struct {
     const char *cpu_model;
     const char *display_model;
 
+    // Bo: change to support 3 sram + 1 flash w/ base + size
+    uint32_t flash_base;
+    uint32_t flash_size_kb;
+    // Bo: in ascending order of sram_base
+    uint32_t sram_base;
+    uint32_t sram_size_kb;
+    uint32_t sram_base2;
+    uint32_t sram_size_kb2;
+    uint32_t sram_base3;
+    uint32_t sram_size_kb3;
+/*
     uint32_t sram_size_kb;
     uint32_t flash_size_kb;
+*/
     uint32_t num_irq;
 
     Object *container;
 
     MemoryRegion flash_mem;
     MemoryRegion sram_mem;
+    // Bo: add 2 more ram region
+    MemoryRegion sram_mem2;
+    MemoryRegion sram_mem3;
+
     MemoryRegion hack_mem;
 
     /**

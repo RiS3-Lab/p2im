@@ -27,6 +27,7 @@
 
 /* ----- ST NUCLEO-F103RB ----- */
 
+#if 0
 static GPIOLEDInfo nucleo_f103rb_leds_info[] = {
     {
         .name = "green-led",
@@ -40,6 +41,7 @@ static GPIOLEDInfo nucleo_f103rb_leds_info[] = {
         .port_bit = 5, },
     { }, /**/
 };
+#endif
 
 static void nucleo_f103rb_board_init_callback(MachineState *machine)
 {
@@ -60,8 +62,8 @@ static void nucleo_f103rb_board_init_callback(MachineState *machine)
             cm_board_get_desc(machine));
 
     Object *peripheral = cm_container_get_peripheral();
-    gpio_led_create_from_info(peripheral, nucleo_f103rb_leds_info,
-            board_surface);
+    //gpio_led_create_from_info(peripheral, nucleo_f103rb_leds_info,
+    //        board_surface);
 }
 
 static QEMUMachine nucleo_f103rb_machine = {

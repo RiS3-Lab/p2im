@@ -228,18 +228,28 @@ static void cortexm_mcu_realize_callback(DeviceState *dev, Error **errp)
 
     cm_state->display_model = display_model_rp;
 
+    // Bo: sink: propagation 3
     /* The cm_state value might have been set by --global */
     int sram_size_kb = cm_state->sram_size_kb;
     if (sram_size_kb == 0) {
         /* Otherwise use the MCU value */
         sram_size_kb = capabilities->sram_size_kb;
     }
-
     /* Max 32 MB ram, to avoid overlapping with the bit-banding area */
     if (sram_size_kb > 32 * 1024) {
         sram_size_kb = 32 * 1024;
     }
     cm_state->sram_size_kb = sram_size_kb;
+
+    // Bo: since we don't know how to set size by --global
+    // we assume cm_state->sram_size_kb* is always 0 and do assignment directly
+    cm_state->sram_size_kb2 = capabilities->sram_size_kb2;
+    cm_state->sram_size_kb3 = capabilities->sram_size_kb3;
+
+    cm_state->sram_base = capabilities->sram_base;
+    cm_state->sram_base2 = capabilities->sram_base2;
+    cm_state->sram_base3 = capabilities->sram_base3;
+
 
     /* The cm_state value might have been set by --global */
     int flash_size_kb = cm_state->flash_size_kb;
@@ -248,6 +258,8 @@ static void cortexm_mcu_realize_callback(DeviceState *dev, Error **errp)
         flash_size_kb = capabilities->flash_size_kb;
     }
     cm_state->flash_size_kb = flash_size_kb;
+
+    cm_state->flash_base = capabilities->flash_base;
 
 #if defined(CONFIG_VERBOSE)
     if (verbosity_level >= VERBOSITY_COMMON) {
@@ -412,17 +424,23 @@ static void cortexm_mcu_reset_callback(DeviceState *dev)
     }
 }
 
+CortexMState *cs_g;
+
 static void cortexm_mcu_memory_regions_create_callback(DeviceState *dev)
 {
     qemu_log_function_name();
 
     CortexMState *cm_state = CORTEXM_MCU_STATE(dev);
+    cs_g = cm_state;
 
     /* Get the system memory region, it must start at 0. */
     MemoryRegion *system_memory = get_system_memory();
 
     int flash_size = cm_state->flash_size_kb * 1024;
     int sram_size = cm_state->sram_size_kb * 1024;
+    // Bo: support 2 more ram regions
+    int sram_size2 = cm_state->sram_size_kb2 * 1024;
+    int sram_size3 = cm_state->sram_size_kb3 * 1024;
 
     Object *mem_container = container_get(cm_state->container, "/memory");
 
@@ -438,7 +456,28 @@ static void cortexm_mcu_memory_regions_create_callback(DeviceState *dev)
     memory_region_init_ram(sram_mem, mem_container, "sram", sram_size,
             &error_abort);
     vmstate_register_ram_global(sram_mem);
-    memory_region_add_subregion(system_memory, 0x20000000, sram_mem);
+    // Bo: support configurable base addr
+    memory_region_add_subregion(system_memory, cm_state->sram_base, sram_mem);
+    //memory_region_add_subregion(system_memory, 0x20000000, sram_mem);
+
+    // Bo: support 2 more ram regions
+    // Check if exists first
+    if (sram_size2) {
+        MemoryRegion *sram_mem2 = &cm_state->sram_mem2;
+        memory_region_init_ram(sram_mem2, mem_container, "sram2", sram_size2,
+                &error_abort);
+        vmstate_register_ram_global(sram_mem2);
+        memory_region_add_subregion(system_memory, cm_state->sram_base2, sram_mem2);
+    }
+
+    if (sram_size3) {
+        MemoryRegion *sram_mem3 = &cm_state->sram_mem3;
+        memory_region_init_ram(sram_mem3, mem_container, "sram3", sram_size3,
+                &error_abort);
+        vmstate_register_ram_global(sram_mem3);
+        memory_region_add_subregion(system_memory, cm_state->sram_base3, sram_mem3);
+    }
+
 
     /*
      * Bitband the 1 MB from 0x20000000-0x200FFFFF area to
