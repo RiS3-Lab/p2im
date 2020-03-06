@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys, subprocess, os, re, signal
+import sys, subprocess, os, re, signal, shutil
 #import pickle
 from pprint import pprint
 
@@ -288,8 +288,10 @@ if __name__ == "__main__":
     cfg = read_config(args.config)
 
     cov_path = "%s/coverage" % cfg.working_dir
-    if not os.path.isdir(cov_path):
-       os.makedirs(cov_path) 
+    if os.path.isdir(cov_path):
+        shutil.rmtree(cov_path)
+    os.makedirs(cov_path)
+
     color_print("Change working dir to: %s" % cov_path, "blue")
     os.chdir(cov_path)
     print("CWD: %s\n" % os.getcwd())
@@ -309,6 +311,10 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         print("\nKeyboard Interrupted!")
+    finally:
+        # Remove the space consuming intermediate result
+        if os.path.isdir("bbl_cov_per_case"):
+            shutil.rmtree("bbl_cov_per_case")
     '''
     finally:
         # clean-up
