@@ -1,0 +1,58 @@
+# Please change configurations that are enclosed in "< >".
+# Please use absolute path in this file.
+
+[DEFAULT] # used only by fuzz.py
+# <repo_path> is the path of root directory of P2IM git repo
+base        = <repo_path>
+# <firmware_name> can be arbitrary string you want. It doesn't need to be the firmware binary name
+program     = <firmware_name>
+# Each firmware may be fuzzed multiple times. So it's better to number each fuzzer run
+run         = <fuzzing_run_num>
+# working directory of fuzzing
+working_dir = %(base)s/fuzzing/%(program)s/%(run)s
+
+[afl] # used only by fuzz.py
+bin         = %(base)s/afl/afl-fuzz
+timeout     = 150+
+input       = %(working_dir)s/inputs
+output      = %(working_dir)s/outputs
+
+[cov] # used only by cov.py
+#count_hang  = False
+count_hang  = True
+bbl_cov_read_sz = 20000000
+# 1 second
+timeout     = 1
+
+[qemu]
+bin         = %(base)s/qemu/precompiled_bin/qemu-system-gnuarmeclipse
+log         = unimp,guest_errors,int
+#log         = unimp,guest_errors,exec,int -D qemu.log
+
+[program]
+# the board/mcu supported by QEMU is listed as comments below
+board       = <board_name>
+mcu         = <mcu_name>
+
+#board       = STM32F429I-Discovery
+#mcu         = STM32F429ZI
+#board       = NUCLEO-F103RB
+#mcu         = STM32F103RB
+#board       = Arduino-Due
+#mcu         = SAM3X8E
+#board       = FRDM-K64F
+#mcu         = MK64FN1M0VLL12
+
+
+# <firmware_elf_file_name> has to be name of firmware elf file
+img         = %(working_dir)s/<firmware_elf_file_name>
+
+[model]
+retry_num   = 3
+peri_addr_range = 512
+# arm-none-eabi-objdump is part of GNU Arm Embedded Toolchain you downloaded while setting up P2IM environment.
+# For example, <path_of_arm-none-eabi-objdump> on my machine is /home/bo/gcc-arm-none-eabi-6-2017-q2-update/bin/arm-none-eabi-objdump
+objdump     = <path_of_arm-none-eabi-objdump>
+# config below are only used by fuzz.py
+bin         = %(base)s/model_instantiation/me.py
+log_file    = %(working_dir)s/me.log
