@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import subprocess,sys,os,json,logging,shutil,signal,time
+import subprocess,sys,os,json,logging,shutil,signal,time,stat
 
 import configparser
 import argparse
@@ -174,14 +174,35 @@ if __name__ == "__main__":
         cmd_afl += ["-d"]
     # end of afl options 
 
-    cmd_afl += [cfg.qemu_bin, "-nographic",
+    cmd_afl_qemu = [cfg.qemu_bin, "-nographic",
         "-board", cfg.board, "-mcu", cfg.mcu, "-image", cfg.img,
         "-pm-stage", "3", "-aflFile", "@@", 
         # options below are not used in no forkserver mode
         #"-me-bin", cfg.me_bin, "-me-config", args.config, 
         #"-model-input", args.model_if
     ]
+    cmd_afl += cmd_afl_qemu
 
+    # run_fw.sh for crash triage
+    with open("run_fw.py", "w") as f:
+        f.write("#!/usr/bin/env python3\n")
+        f.write("import sys,subprocess\n")
+        f.write("if len(sys.argv) < 3 or len(sys.argv) > 4:\n")
+        f.write("    print(\"Usage: %s last_round_of_model_instantiation test_case [--debug]\" % sys.argv[0])\n")
+        f.write("    print(\"\t--debug argument is optional. It halts QEMU and wait for a debugger to be attached\")\n")
+        f.write("    sys.exit(-1)\n")
+        f.write("\n")
+        # replace "'@@'" with "sys.argv[2]"
+        cmd = str(cmd_afl_qemu + ["-model-input", "%s/%%s/peripheral_model.json %% sys.argv[1]" % cfg.working_dir]).replace("'@@'", "sys.argv[2]").replace(" % sys.argv[1]'", "' % sys.argv[1]")
+        f.write("cmd = %s\n" % str(cmd))
+        f.write("\n")
+        f.write("if len(sys.argv) == 4 and sys.argv[3] == '--debug':\n")
+        f.write("    # halt qemu and wait for a debugger to be attached\n")
+        f.write("    cmd+=%s\n" % str(["-gdb", "tcp::9000", "-S"]))
+        f.write("print(cmd)\n")
+        f.write("\n")
+        f.write("subprocess.call(cmd)\n")
+    os.chmod("run_fw.py", stat.S_IRWXU)
 
     print("cmd_afl: %s\n" % ' '.join(cmd_afl))
 
