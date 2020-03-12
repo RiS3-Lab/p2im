@@ -1,6 +1,6 @@
 [submodule "externals/p2im-unit_tests"]
 	path = externals/p2im-unit_tests
-	url = git@github.com:RiS3-Lab/p2im-unit_tests.git
+	url = https://github.com/RiS3-Lab/p2im-unit_tests.git
 [submodule "externals/p2im-ground_truth"]
 	path = externals/p2im-ground_truth
-	url = git@github.com:RiS3-Lab/p2im-ground_truth.git
+	url = https://github.com/RiS3-Lab/p2im-ground_truth.git
