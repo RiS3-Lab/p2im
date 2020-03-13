@@ -7,7 +7,7 @@
 ├── externals                     # git submodules referencing external git repos for unit tests, real firmware, and ground truth
 ├── fuzzing
 │   └── templates                 # "random" seeds and configuration file template to bootstrap fuzzing
-├── LICENSE.md
+├── LICENSE
 ├── model_instantiation           # scripts for instantiating processor-peripheral interface model and fuzzing the firmware
 ├── qemu
 │   ├── build_scripts             # scripts for building QEMU from source code
@@ -26,7 +26,11 @@ All steps have been tested on 64-bit Ubuntu 16.04.
 ### Cloning all git submodules
 ```bash
 # submodules are cloned into externals/
-git submodule init && git submodule update
+git submodule update --init
+```
+git submodules are binded to a specific commit. Updates in submodules can be fetched by 
+```bash
+git submodule update --remote
 ```
 
 ### GNU Arm Embedded Toolchain
