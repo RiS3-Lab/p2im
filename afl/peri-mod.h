@@ -1,10 +1,8 @@
 /*
-   Peripheral modeling - macro definitions
+   P2IM - macro definitions
    ------------------------------------------------------
 
-   Written and maintained by Bo Feng <feng.bo@husky.neu.edu>
-
-   Copyright 2018 All rights reserved.
+   Copyright (C) 2018-2020 RiS3 Lab
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
