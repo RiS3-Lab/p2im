@@ -4,3 +4,6 @@
 [submodule "externals/p2im-ground_truth"]
 	path = externals/p2im-ground_truth
 	url = https://github.com/RiS3-Lab/p2im-ground_truth.git
+[submodule "externals/p2im-real_firmware"]
+	path = externals/p2im-real_firmware
+	url = https://github.com/RiS3-Lab/p2im-real_firmware.git
