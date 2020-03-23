@@ -170,7 +170,15 @@ Please refer to the documentation in `externals/p2im-unit_tests/README.md`
 
 
 ## More documentation
-Please see [docs/](docs/).
+Please see [docs/](docs/) for more documentation.
+
+Please refer to our [paper](https://www.usenix.org/conference/usenixsecurity20/presentation/feng) for more technical details of P<sup>2</sup>IM.
+
+
+## Issues
+If you encounter any problem while using our tool, please open an issue. 
+
+For other communications, you can email feng.bo [at] husky.neu.edu.
 
 
 ## Citing our [paper](https://www.usenix.org/conference/usenixsecurity20/presentation/feng)
