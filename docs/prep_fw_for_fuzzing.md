@@ -9,29 +9,29 @@ Please paste the following snippet to the file in which you are going to invoke 
 ```c
 #include <stdint.h>
 
-int noHyperCall = 0;
+int noHyperCall = 0; // 1: don't make hypercalls
 
-__attribute__ ((naked)) uint32_t aflCall(uint32_t a0, uint32_t a1, uint32_t a2) {
+__attribute__ ((naked)) uint32_t aflCall(__attribute__ ((unused)) uint32_t a0, __attribute__ ((unused)) uint32_t a1, __attribute__ ((unused)) int32_t a2) {
     /*
-     * In qemu, svc $0x3f is intercepted, without really executing it
-     * On real device, it is executed, and may causing unexpected result 
-     * hypercall can be truned off by set noHyperCall to 0
+     * In qemu, svc $0x3f is intercepted, without being executed
+     * On real device, it is executed and may cause firmware crash
+     * It can be skipped by set noHyperCall to 1
      */
-    asm volatile ("svc $0x3f\n\t"
-                  "bx %lr\n\t");
+    __asm__ __volatile__ ("svc $0x3f\n\t"
+                          "bx %lr\n\t");
 }
 
 int startForkserver(int ticks) {
-    // @param ticks: either enable or disable the CPUs timer in each forked child
     if(noHyperCall)
         return 0;
     return aflCall(1, ticks, 0);
 }
+
 ```
 
 Then invoke `startForkserver` by 
 ```c
-startForkserver(1);
+startForkserver(0);
 ```
 
 It does not matter where the aflCall is invoked. 
