@@ -144,7 +144,7 @@ coverage/
 # statFp3.py prints some statistics to stdout, some to stat.csv
 <repo_path>/utilities/model_stat/statFp3.py <last_round_of_model_instantiation>/peripheral_model.json externals/p2im-ground_truth/<ground_truth_for_the_mcu> stat.csv
 ```
-Documentation for `statFp3.py` can be found [here](utilities/model_stat/statFp3.py#L8).
+Documentation for `statFp3.py` can be found [here](utilities/model_stat/statFp3.py#L24).
 Ground truth can be found [here](externals).
 
 ### Analyzing crashing/hanging input
