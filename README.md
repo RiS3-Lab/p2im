@@ -12,7 +12,7 @@
 ├── qemu
 │   ├── build_scripts             # scripts for building QEMU from source code
 │   ├── precompiled_bin           # pre-compiled QEMU binary for a quick start
-│   └── src                       # QEMU source code
+│   └── src                       # QEMU source code. AFL and QEMU system mode emulation integration is based on TriforceAFL.
 ├── README.md
 └── utilities
     ├── coverage                  # scripts for counting fuzzing coverage
