@@ -1,5 +1,5 @@
 This tutorial shows how to add a new MCU and board to QEMU. 
-In short, you need to add the code template below into QEMU source code, and compile QEMU following instructions in [build_qemu.md](docs/build_qemu.md). 
+In short, you need to add the code template below into QEMU source code, and compile QEMU following instructions in [build_qemu.md](build_qemu.md). 
 
 When you add the template, please replace everything enclosed in `${...}`. \
 `${BOARD_NAME}` is the board name you want to use in `-board` option when launching QEMU. \
