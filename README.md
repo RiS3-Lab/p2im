@@ -1,6 +1,8 @@
 # P<sup>2</sup>IM
 This is the repo for *P<sup>2</sup>IM: Scalable and Hardware-independent Firmware Testing via Automatic Peripheral Interface Modeling*, a USENIX Security'20 paper. **Paper, slides, and presentation video** are available [here](https://www.usenix.org/conference/usenixsecurity20/presentation/feng). 
 
+P<sup>2</sup>IM conducts firmware testing in a generic processor emulator (QEMU). P<sup>2</sup>IM automatically models the processor-peripheral interface (i.e., peripheral register and interrupt) to handle the peripherals that are not supported by the emulator.
+
 ## Directory structure of the repo
 ```
 .
