@@ -155,7 +155,6 @@ def inst_cov(cfg):
                     if not cfg.count_boot_code:
                         #print "non_boot_code_start_index/len = %d/%d" % (op.find(non_boot_code_start_addr),len(op))
                         op = op[op.find(non_boot_code_start_addr):]
-                os.remove(f_trace)
 
                 # use group primitive--() to retreive start, end of each BBL
                 BBLs = re.findall('BBL \((0x[0-9a-f]+), (0x[0-9a-f]+)\)', op)
