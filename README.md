@@ -85,7 +85,8 @@ A template for the configuration file is available [here](fuzzing/templates/fuzz
 # Copy the template to the working directory
 cp <repo_path>/fuzzing/templates/fuzz.cfg.template fuzz.cfg
 ```
-Please edit the configuration file following the instructions in the template.
+Please edit the configuration file following the instructions in the template. 
+You can find which mcu/board the [10 real-world firmware](externals/) are based on in Table 7 of our [paper](https://www.usenix.org/conference/usenixsecurity20/presentation/feng). 
 
 ### Launching fuzzer
 Please make sure there is no previously instantiated model in `${WORKING_DIR}` before launching fuzzer.
