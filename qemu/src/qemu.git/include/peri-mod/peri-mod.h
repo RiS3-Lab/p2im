@@ -82,7 +82,8 @@ typedef enum {
 
 typedef struct {
     pm_reg_type_t type;
-    target_ulong val;
+    //target_ulong val;
+    unsigned char val_b[4]; // at most 4 bytes, byte 0, 1, 2, 3
 
     // record value of cr when SR_r happens
     // TODO support multi-SR
@@ -107,7 +108,7 @@ typedef struct {
 // TODO 1kb or 4kb, which is better?
 #define PM_PERI_ADDR_RANGE (1 << 9)
 #define PM_MAX_REG_NUM (PM_PERI_ADDR_RANGE >> 2)
-#define PM_MAX_EVT_NUM 32
+#define PM_MAX_EVT_NUM 64
 
 // 0'ed in create_peri
 typedef struct pm_Peripheral{

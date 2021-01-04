@@ -1193,6 +1193,7 @@ static uint64_t unassigned_mem_read(void *opaque, hwaddr addr,
         }
 
         unsigned int reg_idx = (addr32 % PM_PERI_ADDR_RANGE) / peri->reg_size;
+        unsigned int reg_byte_offset = (addr32 % PM_PERI_ADDR_RANGE) % peri->reg_size;
         if (reg_idx > peri->max_reg_idx) peri->max_reg_idx = reg_idx;
         pm_MMIORegister *reg = &peri->regs[reg_idx];
        
@@ -1257,7 +1258,7 @@ static uint64_t unassigned_mem_read(void *opaque, hwaddr addr,
             pbbl_e = cur_bbl_e;
         }
 
-        int i;
+        int i, i_b;
         pm_Event *e;
         int doneWork_p = 0;
         char err_msg[80] = {0};
@@ -1278,7 +1279,10 @@ static uint64_t unassigned_mem_read(void *opaque, hwaddr addr,
                   reg->last_r_bbl_cnt = bbl_cnt;
                 }
 
-                ret_val = reg->val;
+                //ret_val = reg->val;
+                for (i_b = 0; i_b < size; i_b ++) {
+                  ret_val |= reg->val_b[reg_byte_offset + i_b] << (i_b * 8);
+                }
                 break;
 
             // CR_SR and SR is handled in a slightly different way
@@ -1299,7 +1303,10 @@ static uint64_t unassigned_mem_read(void *opaque, hwaddr addr,
                       if (reg->type == CR_SR) {
                         if (!handle_hybrid_SR_way) {
                           // handle CR_SR in SR way when SR model not found
-                          ret_val = reg->val;
+                          //ret_val = reg->val;
+                          for (i_b = 0; i_b < size; i_b ++) {
+                            ret_val |= reg->val_b[reg_byte_offset + i_b] << (i_b * 8);
+                          }
                           break;
                         } else {
                           bbl_cnt --; // hack to make stage 2 work for CR_SR SR way
@@ -1314,7 +1321,10 @@ static uint64_t unassigned_mem_read(void *opaque, hwaddr addr,
                       stage_term_peri_ba = peri->base_addr;
 
                       for (i = 0; i <= peri->max_reg_idx; i ++)
-                        peri->regs[i].cr_val = peri->regs[i].val;
+                        //peri->regs[i].cr_val = peri->regs[i].val;
+                        for (i_b = 0; i_b < 4; i_b ++) {
+                          peri->regs[i].cr_val |= peri->regs[i].val_b[i_b] << (i_b * 8);
+                        }
 
                       if (reg->type == CR_SR) {
                         CR_SR_r_idx_in_bbl = reg->r_idx_in_bbl;
@@ -1331,7 +1341,10 @@ static uint64_t unassigned_mem_read(void *opaque, hwaddr addr,
                       } else {
                         if (reg->type == CR_SR && !handle_hybrid_SR_way) {
                           // handle CR_SR in SR way when SR model not found
-                          ret_val = reg->val;
+                          //ret_val = reg->val;
+                          for (i_b = 0; i_b < size; i_b ++) {
+                            ret_val |= reg->val_b[reg_byte_offset + i_b] << (i_b * 8);
+                          }
                           break;
                         }
                         // model must exist for SR
@@ -1342,7 +1355,10 @@ static uint64_t unassigned_mem_read(void *opaque, hwaddr addr,
                          || reg->r_idx_in_bbl == CR_SR_r_idx_in_bbl)) {
                         // for CR_SR in same bbl, only the read triggering
                         // SMR is handled in SR way
-                        ret_val = reg->val;
+                        //ret_val = reg->val;
+                        for (i_b = 0; i_b < size; i_b ++) {
+                          ret_val |= reg->val_b[reg_byte_offset + i_b] << (i_b * 8);
+                        }
                         break;
                       }
 
@@ -1404,7 +1420,10 @@ static uint64_t unassigned_mem_read(void *opaque, hwaddr addr,
                       if (reg->type == CR_SR) {
                         if (!handle_hybrid_SR_way) {
                           // handle CR_SR in SR way when SR model not found
-                          ret_val = reg->val;
+                          //ret_val = reg->val;
+                          for (i_b = 0; i_b < size; i_b ++) {
+                            ret_val |= reg->val_b[reg_byte_offset + i_b] << (i_b * 8);
+                          }
                           break;
                         } else {
                           bbl_cnt --; // hack to make stage 2 work for CR_SR SR way
@@ -1554,6 +1573,7 @@ static void unassigned_mem_write(void *opaque, hwaddr addr,
         }
 
         unsigned int reg_idx = (addr32 % PM_PERI_ADDR_RANGE) / peri->reg_size;
+        unsigned int reg_byte_offset = (addr32 % PM_PERI_ADDR_RANGE) % peri->reg_size;
         if (reg_idx > peri->max_reg_idx) peri->max_reg_idx = reg_idx;
         pm_MMIORegister *reg = &peri->regs[reg_idx];
        
@@ -1602,6 +1622,7 @@ static void unassigned_mem_write(void *opaque, hwaddr addr,
             printf("[%x, %x] %3d-th(total %3d-th) \tpm_w *0x%x = 0x%x, turns %s into %s\n",
                 cur_bbl_s, cur_bbl_e, pm_cnt, cnt, addr32, wri_val, pm_rt_str(prev_type), pm_rt_str(reg->type));
 
+        int i_b;
         switch (reg->type) {
             case UC:
                 fprintf(stderr, "Uncategorized register 0x%x is accessed!\n", addr32);
@@ -1612,7 +1633,10 @@ static void unassigned_mem_write(void *opaque, hwaddr addr,
 
             case CR_SR:
             case CR:
-                reg->val = wri_val;
+                //reg->val = wri_val;
+                for (i_b = 0; i_b < size; i_b ++) {
+                  reg->val_b[reg_byte_offset + i_b] = (unsigned char)(wri_val >> (i_b * 8));
+                }
                 break;
 
             case SR:

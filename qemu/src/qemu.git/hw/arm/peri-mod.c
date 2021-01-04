@@ -78,12 +78,17 @@ target_ulong pm_SR_read(pm_Peripheral *peri, pm_Event *e, unsigned int reg_idx) 
 }
 
 pm_Event *pm_SR_find_model(uint32_t bbl_e, pm_Peripheral *peri, pm_MMIORegister *reg) {
-    int i, CR_val_idx = 0, np;
+    int i, i_b, CR_val_idx = 0, np;
     char CR_val[PM_MAX_CR_VAL_BYTE] = {};
+    target_ulong cr_val;
     for(i = 0; i <= peri->max_reg_idx; i ++)
         if (peri->regs[i].type == CR || peri->regs[i].type == CR_SR) {
+            cr_val = 0;
+            for (i_b = 0; i_b < 4; i_b ++) {
+              cr_val |= peri->regs[i].val_b[i_b] << (i_b * 8);
+            }
             np = snprintf(CR_val+CR_val_idx, PM_MAX_CR_VAL_BYTE-CR_val_idx,
-                "%d:0x%x,", i, peri->regs[i].val);
+                "%d:0x%x,", i, cr_val);
             CR_val_idx += np;
             if (CR_val_idx >= PM_MAX_CR_VAL_BYTE) {
               fprintf(stderr, "too many CR_val bytes!\n");

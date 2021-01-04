@@ -1,0 +1,16 @@
+SDL-1.2.15/
+SDL_image-1.2.10/
+build/
+download/
+gettext-0.19.8.1/
+glib-2.51.0/
+install/
+jansson-2.11/
+jpeg-9b/
+libffi-3.2.1/
+libiconv-1.14/
+libpng-1.6.23/
+output/
+pixman-0.34.0/
+qemu-build.git/
+scripts/
