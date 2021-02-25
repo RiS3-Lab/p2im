@@ -16,7 +16,7 @@ Remember to log out and log back in for this to take effect!
 
 ### Install dependencies
 ```bash
-sudo apt-get install curl git automake texinfo
+sudo apt-get install curl git automake texinfo unzip
 ```
 
 
