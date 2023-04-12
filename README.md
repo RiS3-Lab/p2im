@@ -183,7 +183,7 @@ Please refer to our [paper](https://www.usenix.org/conference/usenixsecurity20/p
 ## Issues
 If you encounter any problem while using our tool, please open an issue. 
 
-For other communications, you can email feng.bo [at] northeastern.edu.
+For other communications, you can email bofengwork [at] gmail.com.
 
 
 ## Citing our [paper](https://www.usenix.org/conference/usenixsecurity20/presentation/feng)
